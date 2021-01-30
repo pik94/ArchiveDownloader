@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import Optional
 
 from aiohttp import web
 import aiofiles
@@ -13,12 +14,62 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
 
 
-async def archivate(request: web.Request) -> web.StreamResponse:
+class Archiver:
     """
-    Create an archive.
-    :return:
+    This class helps to run a process of creating a zip archive.
     """
+    def __init__(self,
+                 archive_path: Path,
+                 logger: logging.Logger):
+        self._archive_path = archive_path
+        self._proc = None
+        self._logger = logger
 
+    async def __aenter__(self):
+        self._proc = await asyncio.create_subprocess_exec(
+            'zip', '-r', '-', self._archive_path.stem,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=self._archive_path.parent
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, exc_tb):
+        if exc:
+            self._logger.warning('Downloading data from a pipe was '
+                                 'interrupted')
+            try:
+                self._proc.kill()
+            except Exception as e:
+                logger.error(f'Cannot kill an archiving process: {type(e)}')
+            finally:
+                logger.info('An archiving process was stopped')
+                raise exc
+
+    @property
+    def process(self) -> asyncio.subprocess.Process:
+        return self._proc
+
+    async def read(self,
+                   chunk_size: Optional[int] = CHUNK_SIZE * 1024) -> bytes:
+        """
+        Read chunked data from a stdin
+        :param chunk_size: in kilobytes
+        :return:
+        """
+
+        self._logger.info('Read chunked data from a pipe...')
+        out = await self.process.stdout.read(chunk_size)
+        if self.process.returncode:
+            msg = 'Archiving process return non-zero code'
+            logger.error(msg)
+            raise RuntimeError(msg)
+
+        self._logger.info('Success!')
+        return out
+
+
+async def archive(request: web.Request) -> web.StreamResponse:
     archive_hash = request.match_info.get('archive_hash', '')
     if not archive_hash:
         raise web.HTTPNotFound(reason='Archive does not exist or was deleted.')
@@ -32,33 +83,25 @@ async def archivate(request: web.Request) -> web.StreamResponse:
     stream_response['Content-Type'] = 'application/zip'
     stream_response.headers.add(f'Content-Disposition',
                                 f'attachment;filename="{archive_hash}.zip"')
+
     await stream_response.prepare(request)
 
-    proc = await asyncio.create_subprocess_exec(
-        'zip', '-r', '-', archive_hash,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=Path.cwd() / 'test_photos'
-    )
+    try:
+        async with Archiver(archive_path, logger) as archiver:
+            while True:
+                out = await archiver.read()
+                await stream_response.write(out)
 
-    chunk_size = CHUNK_SIZE * 1024
-    while True:
-        try:
-            out = await proc.stdout.read(chunk_size)
-            logger.debug(f'Ret code: {proc.returncode}')
-            logger.debug('Sending archive chunk...')
-
-            await stream_response.write(out)
-
-            if proc.stdout.at_eof():
-                await stream_response.write_eof()
-                break
-            await asyncio.sleep(INTERVAL_SECS)
-        except asyncio.CancelledError:
-            logger.warning('Downloading was interrupted')
-            logger.info('Process of creating an archive will be killed')
-            proc.kill()
-            raise
+                if archiver.process.stdout.at_eof():
+                    await stream_response.write_eof()
+                    break
+                await asyncio.sleep(INTERVAL_SECS)
+    except asyncio.CancelledError:
+        raise
+    except RuntimeError:
+        raise web.HTTPServerError(reason='Cannot archive data')
+    except Exception:
+        raise web.HTTPServerError(reason='Unknown error')
 
     return stream_response
 
@@ -74,6 +117,6 @@ if __name__ == '__main__':
     app = web.Application()
     app.add_routes([
         web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', archivate),
+        web.get('/archive/{archive_hash}/', archive),
     ])
     web.run_app(app)
