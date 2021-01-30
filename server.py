@@ -6,7 +6,7 @@ from aiohttp import web
 import aiofiles
 
 
-INTERVAL_SECS = 1
+INTERVAL_SECS = 10
 CHUNK_SIZE = 100
 
 
@@ -14,17 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__file__)
 
 
-async def archivate(request):
-    try:
-        response = await _archivate(request)
-    except asyncio.CancelledError:
-        logger.warning('Downloading was interrupted!')
-        raise
-
-    return response
-
-
-async def _archivate(request):
+async def archivate(request: web.Request) -> web.StreamResponse:
     """
     Create an archive.
     :return:
@@ -53,19 +43,27 @@ async def _archivate(request):
     )
 
     while True:
-        out = await proc.stdout.read(CHUNK_SIZE * 1024)
-        logger.debug('Sending archive chunk...')
-        await stream_response.write(out)
-        if proc.stdout.at_eof():
-            await stream_response.write_eof()
-            break
+        try:
+            out = await proc.stdout.read(CHUNK_SIZE * 1024)
+            logger.debug(f'Ret code: {proc.returncode}')
+            logger.debug('Sending archive chunk...')
 
-        await asyncio.sleep(INTERVAL_SECS)
+            await stream_response.write(out)
+
+            if proc.stdout.at_eof():
+                await stream_response.write_eof()
+                break
+            await asyncio.sleep(INTERVAL_SECS)
+        except asyncio.CancelledError:
+            logger.warning('Downloading was interrupted')
+            logger.info('Process of creating an archive will be killed')
+            proc.kill()
+            raise
 
     return stream_response
 
 
-async def handle_index_page(request):
+async def handle_index_page(request: web.Request) -> web.Response:
     async with aiofiles.open('index.html', mode='r') as index_file:
         index_contents = await index_file.read()
     return web.Response(text=index_contents, content_type='text/html')
