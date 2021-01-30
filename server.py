@@ -6,8 +6,7 @@ from aiohttp import web
 import aiofiles
 
 
-INTERVAL_SECS = 10
-CHUNK_SIZE = 100
+from settings import CHUNK_SIZE, INTERVAL_SECS
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -26,10 +25,10 @@ async def archivate(request: web.Request) -> web.StreamResponse:
 
     archive_path = Path.cwd() / f'test_photos/{archive_hash}'
     if not archive_path.exists():
-        raise web.HTTPNotFound(reason='Archive does not exist or was deleted.')
+        raise web.HTTPNotFound(reason='Archive does not exist or was deleted')
 
     stream_response = web.StreamResponse()
-    stream_response.enable_chunked_encoding(chunk_size=CHUNK_SIZE*1024)
+    stream_response.enable_chunked_encoding()
     stream_response['Content-Type'] = 'application/zip'
     stream_response.headers.add(f'Content-Disposition',
                                 f'attachment;filename="{archive_hash}.zip"')
@@ -42,9 +41,10 @@ async def archivate(request: web.Request) -> web.StreamResponse:
         cwd=Path.cwd() / 'test_photos'
     )
 
+    chunk_size = CHUNK_SIZE * 1024
     while True:
         try:
-            out = await proc.stdout.read(CHUNK_SIZE * 1024)
+            out = await proc.stdout.read(chunk_size)
             logger.debug(f'Ret code: {proc.returncode}')
             logger.debug('Sending archive chunk...')
 
