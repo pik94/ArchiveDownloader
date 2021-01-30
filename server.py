@@ -199,9 +199,9 @@ if __name__ == '__main__':
                         help='A chunk size (in kilobytes) for chunks '
                              'which are sent to a client. By default, 100.')
     parser.add_argument('--delay',
-                        type=int,
+                        type=float,
                         required=False,
-                        default=1,
+                        default=1.,
                         help='Delay (in seconds) between sending chunk to '
                              'a client. By default, 1 second.')
     args = parser.parse_args()

@@ -6,7 +6,7 @@ from typing import NoReturn, Optional
 
 class ServerSettings:
     # An interval between sending a chunk of data to a client
-    DELAY = 5
+    DELAY = 0.5
 
     # How many data is sent to a clint (in Kb)
     CHUNK_SIZE = 100
