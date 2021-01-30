@@ -64,7 +64,8 @@ async def archivate(request: web.Request) -> web.StreamResponse:
 
 
 async def handle_index_page(request: web.Request) -> web.Response:
-    async with aiofiles.open('index.html', mode='r') as index_file:
+    index_template_path = Path('templates') / 'index.html'
+    async with aiofiles.open(index_template_path, mode='r') as index_file:
         index_contents = await index_file.read()
     return web.Response(text=index_contents, content_type='text/html')
 
