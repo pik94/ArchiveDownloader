@@ -104,10 +104,8 @@ async def archive(request: web.Request) -> web.StreamResponse:
                 await asyncio.sleep(sts.DELAY)
     except asyncio.CancelledError:
         raise
-    except RuntimeError:
-        raise web.HTTPServerError(reason='Cannot archive data')
     except Exception:
-        raise web.HTTPServerError(reason='Unknown error')
+        pass
 
     return stream_response
 
@@ -154,10 +152,7 @@ def main(args: argparse.Namespace):
     set_logger_settings(args.log_file, level)
 
     app = web.Application()
-    app.add_routes([
-        web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', archive),
-    ])
+    app.add_routes(routes)
     web.run_app(app, host=host, port=port)
 
 
@@ -169,39 +164,45 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False,
                         help='If set you can use an index page for debugging.')
-    parser.add_argument('--host',
+    parser.add_argument('-H',
+                        '--host',
                         type=str,
                         required=False,
                         default='localhost',
                         help='A host where a server will be deployed. '
                              'By default, "localhost"')
-    parser.add_argument('--port',
+    parser.add_argument('-P',
+                        '--port',
                         type=int,
                         required=False,
                         default=8080,
                         help='A port where a server will be deployed. '
                              'By default, 8080')
-    parser.add_argument('--storage_path',
+    parser.add_argument('-S',
+                        '--storage_path',
                         type=str,
                         required=False,
-                        default='test_photos',
+                        default='photos',
                         help='A directory with all photo. '
-                             'By default, ./test_photos')
-    parser.add_argument('--log_file',
+                             'By default, ./photos')
+    parser.add_argument('-L',
+                        '--log_file',
                         type=str,
                         required=False,
                         default='archive.log',
                         help='A path to a log file. By default, ./archive.log')
-    parser.add_argument('--chunk_size',
+    parser.add_argument('-C',
+                        '--chunk_size',
                         type=int,
                         required=False,
                         default=100,
                         help='A chunk size (in kilobytes) for chunks '
                              'which are sent to a client. By default, 100.')
-    parser.add_argument('--delay',
+    parser.add_argument('-D',
+                        '--delay',
                         type=float,
                         required=False,
-                        default=1.,
+                        default=0.5,
                         help='Delay (in seconds) between sending chunk to '
                              'a client. By default, 1 second.')
     args = parser.parse_args()

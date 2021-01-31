@@ -1,0 +1,6 @@
+venv
+README.md
+test_photos
+**/__pycache__
+.git
+.gitignore
