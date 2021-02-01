@@ -7,7 +7,6 @@ from typing import Optional
 from aiohttp import web
 import aiofiles
 
-
 from settings import set_logger_settings, ServerSettings as sts
 
 
